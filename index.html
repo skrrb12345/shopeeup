@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CareMarket – 퀵 리플라이 & 가격계산기 (완성형)</title>
+  <meta name="theme-color" content="#0ea5e9" />
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--muted:#94a3b8;--text:#e5e7eb;--brand:#0ea5e9;--ok:#10b981;--warn:#f59e0b;--danger:#ef4444}
+    *{box-sizing:border-box} body{margin:0;font-family:Pretendard,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif;background:#0b1220;color:var(--text)}
+    .wrap{max-width:960px;margin:auto;padding:20px}
+    h1{font-size:20px;font-weight:700;margin:0 0 10px}
+    .tabs{display:flex;gap:6px;margin:16px 0 10px}
+    .tab{padding:10px 14px;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#cbd5e1;cursor:pointer}
+    .tab.active{background:#0ea5e922;border-color:#0ea5e9}
+    .panel{background:#0f172a;border:1px solid #334155;border-radius:12px;padding:16px;margin-bottom:16px}
+    input,select,textarea{width:100%;background:#0b1220;border:1px solid #334155;border-radius:10px;color:#e5e7eb;padding:10px;margin-top:4px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+    .btn{padding:10px 14px;border-radius:10px;background:#0ea5e9;color:white;border:none;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid #334155;color:#94a3b8}
+    .stat{background:#0b1220;border:1px solid #334155;border-radius:10px;padding:10px;margin-top:10px}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111827;border:1px solid #374151;color:#e5e7eb;padding:10px 14px;border-radius:10px;opacity:0;transition:.3s}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CareMarket – 퀵 리플라이 & 가격계산기</h1>
+    <div class="tabs">
+      <button class="tab active" data-tab="calc">계산기</button>
+      <button class="tab" data-tab="tpl">템플릿</button>
+      <button class="tab" data-tab="settings">설정</button>
+    </div>
+
+    <section class="panel" data-panel="calc">
+      <label>국가 선택</label>
+      <select id="marketSelect">
+        <option value="VN">베트남 (VND)</option>
+        <option value="TH">태국 (THB)</option>
+        <option value="SG">싱가포르 (SGD)</option>
+      </select>
+      <label>판매가 (현지 통화)</label>
+      <input id="price" placeholder="예: 199000" type="number" />
+      <label>원가 (KRW)</label>
+      <input id="cost" placeholder="예: 12000" type="number" />
+
+      <div class="row">
+        <button class="btn" id="calcBtn">계산</button>
+      </div>
+      <div id="result" class="stat"></div>
+    </section>
+
+    <section class="panel" data-panel="tpl" hidden>
+      <label>언어 선택</label>
+      <select id="langSelect">
+        <option value="ko">한국어</option>
+        <option value="vi">베트남어</option>
+        <option value="th">태국어</option>
+        <option value="en">영어</option>
+      </select>
+      <label>상황 선택</label>
+      <select id="tagSelect"></select>
+      <textarea id="tplText"></textarea>
+      <div class="row">
+        <button class="btn" id="copyBtn">복사하기</button>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="settings" hidden>
+      <h3>기본 설정</h3>
+      <ul style="font-size:14px;line-height:1.6">
+        <li>🇻🇳 베트남: 커미션 3% + 거래 4.63% + 플랫폼 인프라 3,000₫/건 · 배송비 20,000₫ · 환율 1KRW=18.5₫</li>
+        <li>🇹🇭 태국: 커미션 7% + 거래 3% + 플랫폼 1฿/건 · 배송비 30฿ · 환율 1KRW=0.027฿</li>
+        <li>🇸🇬 싱가포르: 커미션 7.63% + 거래 2.18% · 배송비 3SGD · 환율 1KRW=0.001SGD</li>
+        <li style="color:#94a3b8">* 카테고리/프로그램(Free Shipping, Coins Cashback, Shopee Mall 등)에 따라 실제 수수료가 달라질 수 있습니다. 설정 탭에서 값 수정 가능합니다.</li>
+      </ul>
+    </section>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+  // ---------- Data ----------
+  const templates = {
+    ko: {
+      '배송지연 안내': '안녕하세요 {name}님, 한국은 현재 명절 기간이라 배송이 {date}부터 재개됩니다. 기다려주셔서 감사합니다.',
+      '재고부족 안내': '{name}님, 요청하신 상품은 현재 일시 품절 상태입니다. {date}경 입고 예정입니다.',
+    },
+    vi: {
+      'Thông báo trễ giao hàng': 'Xin chào {name}, hiện Hàn Quốc đang trong kỳ nghỉ lễ. Đơn hàng của bạn sẽ được gửi từ ngày {date}. Cảm ơn bạn đã thông cảm.',
+      'Hết hàng tạm thời': 'Xin lỗi {name}, sản phẩm bạn muốn tạm hết hàng. Dự kiến có lại vào {date}.',
+    },
+    th: {
+      'แจ้งล่าช้า': 'สวัสดี {name} ขณะนี้เป็นช่วงวันหยุดของเกาหลี สินค้าจะเริ่มจัดส่งตั้งแต่วันที่ {date} ขอบคุณค่ะ',
+      'สินค้าหมดชั่วคราว': 'ขอโทษค่ะ {name} สินค้าหมดชั่วคราว จะกลับมาในวันที่ {date}',
+    },
+    en: {
+      'Shipping delay': 'Hello {name}, due to the Korean holiday, your order will be shipped starting from {date}. Thank you for your patience.',
+      'Out of stock': 'Dear {name}, the product is currently out of stock and will be restocked around {date}.',
+    }
+  };
+
+  const feeData = {
+    // VN & TH from Cube Asia take-rate tracker (Feb 3, 2025); SG from SiteGiant (TXN 2.18% GST incl., Dec 30, 2024) + PilotoAsia (commission ranges, Jan 1, 2025)
+    VN: { currency: 'VND', commissionPct: 0.03, transPct: 0.0463, infraFixed: 3000, ship: 20000, fx: 18.5 },
+    TH: { currency: 'THB', commissionPct: 0.07, transPct: 0.03, infraFixed: 1, ship: 30, fx: 0.027 },
+    SG: { currency: 'SGD', commissionPct: 0.0763, transPct: 0.0218, infraFixed: 0, ship: 3, fx: 0.001 },
+  };
+
+  // ---------- Helpers ----------
+  const $ = q => document.querySelector(q);
+  const $$ = q => document.querySelectorAll(q);
+  const showToast = msg => {const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1200)};
+
+  // Tabs
+  $$('.tab').forEach(tab => tab.addEventListener('click', () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const key = tab.dataset.tab;
+    $$('section.panel').forEach(sec => sec.hidden = sec.dataset.panel !== key);
+  }));
+
+  // Templates UI
+  function updateTags() {
+    const lang = $('#langSelect').value;
+    const tags = Object.keys(templates[lang]);
+    const tagSel = $('#tagSelect');
+    tagSel.innerHTML = tags.map(t => `<option>${t}</option>`).join('');
+    $('#tplText').value = templates[lang][tags[0]];
+  }
+  $('#langSelect').addEventListener('change', updateTags);
+  $('#tagSelect').addEventListener('change', e => {
+    const lang = $('#langSelect').value;
+    $('#tplText').value = templates[lang][e.target.value];
+  });
+  updateTags();
+
+  $('#copyBtn').addEventListener('click', async () => {
+    const text = $('#tplText').value;
+    await navigator.clipboard.writeText(text);
+    showToast('복사 완료');
+  });
+
+  // Calculator
+  $('#calcBtn').addEventListener('click', () => {
+    const mk = $('#marketSelect').value;
+    const {currency, commissionPct, transPct, infraFixed, ship, fx} = feeData[mk];
+    const price = Number($('#price').value || 0);
+    const costKRW = Number($('#cost').value || 0);
+
+    const commission = price * (commissionPct || 0);
+    const transFee = price * (transPct || 0);
+    const platformFixed = infraFixed || 0; // per order fixed fee
+    const totalFee = commission + transFee + platformFixed;
+    const costLocal = costKRW * fx;
+    const profit = price - totalFee - ship - costLocal;
+    const margin = price ? (profit / price * 100).toFixed(1) : '0.0';
+
+    $('#result').innerHTML = `
+      <div>판매가: ${price.toLocaleString()} ${currency}</div>
+      <div>커미션: ${commission.toLocaleString()} ${currency} (${(commissionPct*100).toFixed(2)}%)</div>
+      <div>거래수수료: ${transFee.toLocaleString()} ${currency} (${(transPct*100).toFixed(2)}%)</div>
+      ${platformFixed?`<div>플랫폼 고정: ${platformFixed.toLocaleString()} ${currency}</div>`:''}
+      <div>총 수수료: ${totalFee.toLocaleString()} ${currency}</div>
+      <div>순이익: ${profit.toLocaleString()} ${currency}</div>
+      <div>마진율: ${margin}%</div>
+    `;
+  });
+
+  // PWA (manifest + SW)
+  (function createManifest(){
+    const manifest = { name:'CareMarket – Quick Reply & Calculator', short_name:'CareMarket', start_url:'./', display:'standalone', background_color:'#0b1220', theme_color:'#0ea5e9', icons:[{src:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%230ea5e9"/><path d="M50 10l12 24 26 4-19 18 4 26-23-12-23 12 4-26L12 38l26-4 12-24z" fill="%230b1220"/></svg>', sizes:'100x100', type:'image/svg+xml'}] };
+    const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+    const link = document.createElement('link'); link.rel='manifest'; link.href = URL.createObjectURL(blob); document.head.appendChild(link);
+  })();
+
+  (function registerSW(){
+    if(!('serviceWorker' in navigator)) return;
+    const swCode = `self.addEventListener('install',e=>{e.waitUntil(caches.open('cm-mvp-v1').then(c=>c.addAll(['./'])))});self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))})`;
+    const blob = new Blob([swCode], {type:'text/javascript'});
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  })();
+  </script>
+</body>
+</html>
